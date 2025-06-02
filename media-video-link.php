@@ -31,6 +31,10 @@ class MediaVideoLink {
         add_filter('attachment_fields_to_save', array($this, 'save_video_link_field'), 10, 2);
         add_action('wp_ajax_save-attachment-compat', array($this, 'ajax_save_video_link'), 0);
         
+        // Admin settings
+        add_action('admin_menu', array($this, 'add_settings_page'));
+        add_action('admin_init', array($this, 'register_settings'));
+        
         // Frontend functionality for WooCommerce
         if (class_exists('WooCommerce')) {
             add_action('wp_enqueue_scripts', array($this, 'enqueue_frontend_assets'));
@@ -40,6 +44,99 @@ class MediaVideoLink {
         
         // REST API
         add_action('rest_api_init', array($this, 'register_rest_routes'));
+    }
+    
+    /**
+     * Add settings page to admin menu
+     */
+    public function add_settings_page() {
+        add_options_page(
+            __('Media Video Link Settings', 'media-video-link'),
+            __('Media Video Link', 'media-video-link'),
+            'manage_options',
+            'media-video-link',
+            array($this, 'settings_page_callback')
+        );
+    }
+    
+    /**
+     * Register plugin settings
+     */
+    public function register_settings() {
+        register_setting('mvl_settings', 'mvl_display_mode', array(
+            'type' => 'string',
+            'default' => 'inline',
+            'sanitize_callback' => array($this, 'sanitize_display_mode')
+        ));
+        
+        add_settings_section(
+            'mvl_general_settings',
+            __('General Settings', 'media-video-link'),
+            array($this, 'settings_section_callback'),
+            'media-video-link'
+        );
+        
+        add_settings_field(
+            'mvl_display_mode',
+            __('Video Display Mode', 'media-video-link'),
+            array($this, 'display_mode_field_callback'),
+            'media-video-link',
+            'mvl_general_settings'
+        );
+    }
+    
+    /**
+     * Sanitize display mode setting
+     */
+    public function sanitize_display_mode($value) {
+        $valid_modes = array('modal', 'inline');
+        return in_array($value, $valid_modes) ? $value : 'inline';
+    }
+    
+    /**
+     * Settings section callback
+     */
+    public function settings_section_callback() {
+        echo '<p>' . __('Configure how videos are displayed in the product gallery.', 'media-video-link') . '</p>';
+    }
+    
+    /**
+     * Display mode field callback
+     */
+    public function display_mode_field_callback() {
+        $display_mode = get_option('mvl_display_mode', 'inline');
+        ?>
+        <select name="mvl_display_mode" id="mvl_display_mode">
+            <option value="inline" <?php selected($display_mode, 'inline'); ?>>
+                <?php _e('Inline Gallery (Default)', 'media-video-link'); ?>
+            </option>
+            <option value="modal" <?php selected($display_mode, 'modal'); ?>>
+                <?php _e('Modal Popup', 'media-video-link'); ?>
+            </option>
+        </select>
+        <p class="description">
+            <?php _e('Inline Gallery: Videos play directly within the gallery slider.', 'media-video-link'); ?><br>
+            <?php _e('Modal Popup: Videos open in a popup overlay when clicked.', 'media-video-link'); ?>
+        </p>
+        <?php
+    }
+    
+    /**
+     * Settings page callback
+     */
+    public function settings_page_callback() {
+        ?>
+        <div class="wrap">
+            <h1><?php echo esc_html(get_admin_page_title()); ?></h1>
+            <form action="options.php" method="post">
+                <?php
+                settings_fields('mvl_settings');
+                do_settings_sections('media-video-link');
+                submit_button();
+                ?>
+            </form>
+        </div>
+        <?php
     }
     
     /**
@@ -125,14 +222,15 @@ class MediaVideoLink {
                 error_log('MVL JS URL: ' . $js_url);
             }
             
-            wp_enqueue_style('media-video-link-frontend', $css_url, array(), '1.0.1');
-            wp_enqueue_script('media-video-link-frontend', $js_url, array('jquery'), '1.0.1', true);
+            wp_enqueue_style('media-video-link-frontend', $css_url, array(), '1.0.9');
+            wp_enqueue_script('media-video-link-frontend', $js_url, array('jquery'), '1.0.9', true);
             
-            // Add debugging data
-            wp_localize_script('media-video-link-frontend', 'mvl_debug', array(
+            // Add debugging data and settings
+            wp_localize_script('media-video-link-frontend', 'mvl_settings', array(
                 'plugin_url' => plugin_dir_url(__FILE__),
                 'is_product' => is_product() ? 'yes' : 'no',
-                'debug' => current_user_can('manage_options') ? 'yes' : 'no'
+                'debug' => current_user_can('manage_options') ? 'yes' : 'no',
+                'display_mode' => get_option('mvl_display_mode', 'inline')
             ));
         }
     }
@@ -142,10 +240,38 @@ class MediaVideoLink {
      */
     public function add_play_button_to_gallery_image($html, $attachment_id) {
         $video_link = get_post_meta($attachment_id, '_video_link', true);
+        $display_mode = get_option('mvl_display_mode', 'inline');
         
         if (!empty($video_link)) {
-            // Add play button overlay and video link data attribute
-            $play_button = '<div class="mvl-play-button" data-video-url="' . esc_url($video_link) . '">';
+            // Add data attributes for video URL and attachment ID
+            $data_attrs = 'data-video-url="' . esc_url($video_link) . '" data-attachment-id="' . esc_attr($attachment_id) . '"';
+            
+            if ($display_mode === 'inline') {
+                // For inline mode, add the video element but keep it hidden initially
+                $video_element = '<div class="mvl-inline-video-container" style="display:none;" ' . $data_attrs . '>';
+                $video_element .= '<div class="mvl-video-wrapper">';
+                
+                // Check if it's a self-hosted video or external
+                if (preg_match('/\.(mp4|webm|ogv|ogg)(\?.*)?$/i', $video_link)) {
+                    $video_element .= '<video class="mvl-inline-video" controls preload="metadata">';
+                    $video_element .= '<source src="' . esc_url($video_link) . '" type="video/mp4">';
+                    $video_element .= 'Your browser does not support the video tag.';
+                    $video_element .= '</video>';
+                } else {
+                    // For external videos, we'll use an iframe
+                    $video_element .= '<div class="mvl-inline-iframe-container"></div>';
+                }
+                
+                $video_element .= '</div>';
+                $video_element .= '</div>';
+                
+                // Insert video element inside the gallery image div, after all content
+                $html = preg_replace('/(<div[^>]*class="[^"]*woocommerce-product-gallery__image[^"]*"[^>]*>.*?)(<\/div>)$/s', 
+                    '$1' . $video_element . '$2', $html);
+            }
+            
+            // Add play button overlay for both modes
+            $play_button = '<div class="mvl-play-button" ' . $data_attrs . '>';
             $play_button .= '<svg viewBox="0 0 24 24" width="48" height="48" fill="white">';
             $play_button .= '<path d="M8 5v14l11-7z"/>';
             $play_button .= '</svg>';
@@ -154,8 +280,9 @@ class MediaVideoLink {
             // Find the img tag and add our overlay
             $html = preg_replace('/(<div[^>]*class="[^"]*woocommerce-product-gallery__image[^"]*"[^>]*>)/', '$1' . $play_button, $html);
             
-            // Add class to identify images with video
-            $html = str_replace('woocommerce-product-gallery__image', 'woocommerce-product-gallery__image mvl-has-video', $html);
+            // Add classes to identify images with video and the display mode
+            $html = str_replace('woocommerce-product-gallery__image', 
+                'woocommerce-product-gallery__image mvl-has-video mvl-mode-' . $display_mode, $html);
         }
         
         return $html;
@@ -176,193 +303,10 @@ class MediaVideoLink {
             console.log('🔍 Plugin URL: <?php echo esc_js($plugin_url); ?>');
             console.log('🔍 jQuery available:', typeof jQuery !== 'undefined');
             console.log('🔍 $ available:', typeof $ !== 'undefined');
+            console.log('🔍 Display Mode: <?php echo esc_js(get_option('mvl_display_mode', 'modal')); ?>');
             
-            // Wait for jQuery and DOM
-            function initMVL() {
-                if (typeof jQuery === 'undefined') {
-                    console.log('❌ jQuery not available, retrying...');
-                    setTimeout(initMVL, 500);
-                    return;
-                }
-                
-                console.log('✅ jQuery found, initializing...');
-                
-                jQuery(document).ready(function($) {
-                    console.log('✅ DOM ready, starting MVL...');
-                    
-                    // Create modal
-                    if ($('#mvl-video-modal').length === 0) {
-                        $('body').append(`
-                            <div id="mvl-video-modal" class="mvl-video-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 999999;">
-                                <div class="mvl-video-container" style="position: relative; width: 90%; max-width: 900px; margin: 20px auto; aspect-ratio: 16/9; background: #000;">
-                                    <button class="mvl-close-button" style="position: absolute; top: -50px; right: 0; background: none; border: none; color: white; font-size: 24px; cursor: pointer;">×</button>
-                                    <iframe class="mvl-video-iframe" style="width: 100%; height: 100%; border: none; display: none;" allowfullscreen allow="autoplay; encrypted-media"></iframe>
-                                    <video class="mvl-video-player" style="width: 100%; height: 100%; display: none;" controls autoplay></video>
-                                </div>
-                            </div>
-                        `);
-                        
-                        // Add CSS to prevent hover darkening
-                        if (!$('#mvl-video-styles').length) {
-                            $('head').append(`
-                                <style id="mvl-video-styles">
-                                /* Prevent darkening overlays on video modal */
-                                #mvl-video-modal,
-                                #mvl-video-modal *,
-                                .mvl-video-modal,
-                                .mvl-video-modal *,
-                                .mvl-video-container,
-                                .mvl-video-container *,
-                                .mvl-video-iframe,
-                                .mvl-video-player {
-                                    transition: none !important;
-                                    filter: none !important;
-                                    opacity: 1 !important;
-                                    background-color: transparent !important;
-                                }
-                                
-                                /* Remove any hover effects on video elements */
-                                #mvl-video-modal:hover,
-                                #mvl-video-modal *:hover,
-                                .mvl-video-modal:hover,
-                                .mvl-video-modal *:hover,
-                                .mvl-video-container:hover,
-                                .mvl-video-container *:hover,
-                                .mvl-video-iframe:hover,
-                                .mvl-video-player:hover {
-                                    transition: none !important;
-                                    filter: none !important;
-                                    opacity: 1 !important;
-                                    background-color: transparent !important;
-                                    box-shadow: none !important;
-                                    transform: none !important;
-                                }
-                                
-                                /* Ensure video modal backdrop doesn't change */
-                                #mvl-video-modal {
-                                    background: rgba(0,0,0,0.9) !important;
-                                }
-                                
-                                /* Remove any CSS overlays that might be applied */
-                                #mvl-video-modal::before,
-                                #mvl-video-modal::after,
-                                .mvl-video-container::before,
-                                .mvl-video-container::after {
-                                    display: none !important;
-                                    content: none !important;
-                                }
-                                
-                                /* Target YouTube player internals */
-                                .mvl-video-iframe iframe,
-                                iframe[src*="youtube.com"],
-                                iframe[src*="youtu.be"] {
-                                    pointer-events: auto !important;
-                                }
-                                
-                                /* Try to prevent video player control overlays */
-                                .mvl-video-iframe,
-                                .mvl-video-player {
-                                    position: relative !important;
-                                }
-                                
-                                /* Override any video control hover effects */
-                                .mvl-video-iframe:hover,
-                                .mvl-video-player:hover {
-                                    filter: brightness(1) !important;
-                                    opacity: 1 !important;
-                                }
-                                
-                                /* Additional CSS to prevent video darkening */
-                                .mvl-video-container:hover .mvl-video-iframe,
-                                .mvl-video-container:hover .mvl-video-player {
-                                    filter: none !important;
-                                    opacity: 1 !important;
-                                    brightness: 1 !important;
-                                }
-                                </style>
-                            `);
-                        }
-                        console.log('✅ Modal created');
-                    }
-                    
-                    // Check for play buttons
-                    const playButtons = $('.mvl-play-button');
-                    console.log('🔍 Found', playButtons.length, 'play buttons');
-                    
-                    // Handle clicks
-                    $(document).on('click', '.mvl-play-button', function(e) {
-                        e.preventDefault();
-                        console.log('🎯 Play button clicked!');
-                        
-                        const videoUrl = $(this).data('video-url');
-                        console.log('🎯 Video URL:', videoUrl);
-                        
-                        if (videoUrl) {
-                            $('#mvl-video-modal').show();
-                            
-                            // Convert URL to embeddable format
-                            let embedUrl = videoUrl;
-                            
-                            // YouTube
-                            const youtubeMatch = videoUrl.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/ ]{11})/);
-                            if (youtubeMatch) {
-                                embedUrl = `https://www.youtube.com/embed/${youtubeMatch[1]}?autoplay=1&rel=0&modestbranding=1&controls=1&showinfo=0&fs=1&iv_load_policy=3`;
-                            }
-                            
-                            // Vimeo
-                            const vimeoMatch = videoUrl.match(/(?:vimeo\.com\/)([0-9]+)/);
-                            if (vimeoMatch) {
-                                embedUrl = `https://player.vimeo.com/video/${vimeoMatch[1]}?autoplay=1&title=0&byline=0&portrait=0&controls=1`;
-                            }
-                            
-                            // Check if it's a video file
-                            const isVideoFile = /\.(mp4|webm|ogv|ogg)(\?.*)?$/i.test(videoUrl);
-                            
-                            if (isVideoFile) {
-                                // Use HTML5 video
-                                const video = $('.mvl-video-player');
-                                video.show().attr('src', videoUrl);
-                                $('.mvl-video-iframe').hide();
-                            } else {
-                                // Use iframe
-                                const iframe = $('.mvl-video-iframe');
-                                iframe.show().attr('src', embedUrl);
-                                $('.mvl-video-player').hide();
-                            }
-                        }
-                    });
-                    
-                    // Handle close
-                    $(document).on('click', '.mvl-close-button, .mvl-video-modal', function(e) {
-                        if (e.target === this) {
-                            console.log('🔒 Closing video modal');
-                            $('#mvl-video-modal').hide();
-                            
-                            // Stop iframe video
-                            $('.mvl-video-iframe').attr('src', '').hide();
-                            
-                            // Stop HTML5 video
-                            const videoEl = $('.mvl-video-player')[0];
-                            if (videoEl) {
-                                videoEl.pause();
-                                videoEl.currentTime = 0;
-                                videoEl.src = '';
-                            }
-                            $('.mvl-video-player').hide();
-                        }
-                    });
-                    
-                    // Handle escape key
-                    $(document).on('keydown', function(e) {
-                        if (e.keyCode === 27 && $('#mvl-video-modal').is(':visible')) {
-                            $('.mvl-close-button').click();
-                        }
-                    });
-                });
-            }
-            
-            // Start initialization
-            initMVL();
+            // The external frontend.js file handles everything now
+            console.log('✅ MVL Plugin Active - Using external JS file');
             </script>
             <?php
         }
