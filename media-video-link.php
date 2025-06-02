@@ -222,8 +222,8 @@ class MediaVideoLink {
                 error_log('MVL JS URL: ' . $js_url);
             }
             
-            wp_enqueue_style('media-video-link-frontend', $css_url, array(), '1.0.9');
-            wp_enqueue_script('media-video-link-frontend', $js_url, array('jquery'), '1.0.9', true);
+            wp_enqueue_style('media-video-link-frontend', $css_url, array(), '1.1.0');
+            wp_enqueue_script('media-video-link-frontend', $js_url, array('jquery'), '1.1.0', true);
             
             // Add debugging data and settings
             wp_localize_script('media-video-link-frontend', 'mvl_settings', array(

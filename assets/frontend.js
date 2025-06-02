@@ -518,4 +518,78 @@ jQuery(document).ready(function($) {
         setTimeout(initVideoLinks, 100);
     });
     
+    // Initialize gallery carousel enhancement
+    function initGalleryCarousel() {
+        const $gallery = $('.woocommerce-product-gallery');
+        if ($gallery.length === 0) return;
+        
+        // Wait for gallery to be initialized
+        setTimeout(function() {
+            const $nav = $gallery.find('.flex-control-nav');
+            if ($nav.length === 0) return;
+            
+            // Wrap nav in container if not already wrapped
+            if (!$nav.parent().hasClass('mvl-gallery-nav-container')) {
+                $nav.wrap('<div class="mvl-gallery-nav-container"></div>');
+            }
+            
+            const $container = $nav.parent();
+            
+            // Add navigation arrows
+            if ($container.find('.mvl-gallery-nav').length === 0) {
+                $container.append('<button class="mvl-gallery-nav mvl-prev" type="button">‹</button>');
+                $container.append('<button class="mvl-gallery-nav mvl-next" type="button">›</button>');
+            }
+            
+            // Handle arrow clicks
+            $container.on('click', '.mvl-prev', function() {
+                const scrollAmount = $nav[0].scrollLeft - 200;
+                $nav.animate({ scrollLeft: scrollAmount }, 300);
+            });
+            
+            $container.on('click', '.mvl-next', function() {
+                const scrollAmount = $nav[0].scrollLeft + 200;
+                $nav.animate({ scrollLeft: scrollAmount }, 300);
+            });
+            
+            // Update arrow visibility based on scroll position
+            function updateArrows() {
+                const scrollLeft = $nav.scrollLeft();
+                const scrollWidth = $nav[0].scrollWidth;
+                const clientWidth = $nav[0].clientWidth;
+                
+                $container.find('.mvl-prev').toggle(scrollLeft > 0);
+                $container.find('.mvl-next').toggle(scrollLeft < scrollWidth - clientWidth - 5);
+            }
+            
+            // Check arrows on scroll and resize
+            $nav.on('scroll', updateArrows);
+            $(window).on('resize', updateArrows);
+            
+            // Initial arrow update
+            updateArrows();
+            
+            // Ensure active thumbnail is visible
+            const $activeThumb = $nav.find('.flex-active').parent();
+            if ($activeThumb.length > 0) {
+                const thumbLeft = $activeThumb.position().left;
+                const thumbWidth = $activeThumb.outerWidth();
+                const navWidth = $nav.width();
+                const scrollLeft = $nav.scrollLeft();
+                
+                if (thumbLeft < 0 || thumbLeft + thumbWidth > navWidth) {
+                    $nav.animate({ 
+                        scrollLeft: scrollLeft + thumbLeft - (navWidth / 2) + (thumbWidth / 2) 
+                    }, 300);
+                }
+            }
+        }, 500);
+    }
+    
+    // Initialize carousel on page load
+    initGalleryCarousel();
+    
+    // Reinitialize on gallery update
+    $(document).on('woocommerce_gallery_init', initGalleryCarousel);
+    
 });

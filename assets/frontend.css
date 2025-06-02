@@ -303,3 +303,107 @@
         right: 5px;
     }
 }
+
+/* Gallery thumbnails carousel styling */
+.woocommerce-product-gallery .flex-control-nav {
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    scroll-behavior: smooth !important;
+    -webkit-overflow-scrolling: touch !important;
+    margin: 10px 0 !important;
+    padding: 5px 0 !important;
+    position: relative !important;
+    width: 100% !important;
+    max-width: 100% !important;
+}
+
+.woocommerce-product-gallery .flex-control-nav li {
+    flex: 0 0 auto !important;
+    width: auto !important;
+    margin: 0 5px !important;
+    display: inline-block !important;
+}
+
+.woocommerce-product-gallery .flex-control-nav li img {
+    width: 80px !important;
+    height: 80px !important;
+    object-fit: cover !important;
+    cursor: pointer !important;
+    border: 2px solid transparent !important;
+    transition: all 0.3s ease !important;
+}
+
+.woocommerce-product-gallery .flex-control-nav li img.flex-active,
+.woocommerce-product-gallery .flex-control-nav li img:hover {
+    border-color: #333 !important;
+    transform: scale(1.05) !important;
+}
+
+/* Custom scrollbar for webkit browsers */
+.woocommerce-product-gallery .flex-control-nav::-webkit-scrollbar {
+    height: 6px !important;
+}
+
+.woocommerce-product-gallery .flex-control-nav::-webkit-scrollbar-track {
+    background: #f1f1f1 !important;
+    border-radius: 3px !important;
+}
+
+.woocommerce-product-gallery .flex-control-nav::-webkit-scrollbar-thumb {
+    background: #888 !important;
+    border-radius: 3px !important;
+}
+
+.woocommerce-product-gallery .flex-control-nav::-webkit-scrollbar-thumb:hover {
+    background: #555 !important;
+}
+
+/* Navigation arrows for carousel */
+.mvl-gallery-nav {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    background: rgba(0, 0, 0, 0.5);
+    color: white;
+    border: none;
+    padding: 10px;
+    cursor: pointer;
+    z-index: 10;
+    font-size: 18px;
+    line-height: 1;
+    border-radius: 3px;
+    transition: all 0.3s ease;
+}
+
+.mvl-gallery-nav:hover {
+    background: rgba(0, 0, 0, 0.8);
+}
+
+.mvl-gallery-nav.mvl-prev {
+    left: 0;
+}
+
+.mvl-gallery-nav.mvl-next {
+    right: 0;
+}
+
+/* Container for navigation */
+.mvl-gallery-nav-container {
+    position: relative;
+    width: 100%;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .woocommerce-product-gallery .flex-control-nav li img {
+        width: 60px !important;
+        height: 60px !important;
+    }
+    
+    .mvl-gallery-nav {
+        padding: 5px;
+        font-size: 14px;
+    }
+}
